@@ -2,7 +2,7 @@ import express from 'express';
 import { Server as WebSocketServer, WebSocket } from 'ws';
 import http from 'http';
 import axios from 'axios';
-import * as cors from 'cors';
+import cors from 'cors';
 import { NotificationService } from './services/NotificationService';
 import { json } from 'body-parser';
 
