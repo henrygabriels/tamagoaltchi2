@@ -2,16 +2,16 @@
 FROM node:18-slim
 
 # Set working directory
-WORKDIR /app/server
+WORKDIR /app
 
 # Copy package files
-COPY server/package*.json ./
+COPY package*.json ./
 
 # Install dependencies
 RUN npm ci
 
 # Copy source code
-COPY server/ .
+COPY . .
 
 # Build TypeScript
 RUN npm run build
