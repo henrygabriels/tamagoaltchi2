@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "782694007708",
+    "project_id": "tamagoaltchi",
+    "storage_bucket": "tamagoaltchi.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:782694007708:android:df3402d6cdbd7b4ba8be59",
+        "android_client_info": {
+          "package_name": "com.tamagoaltchi.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCB98V-EYiXbw7KrpjX5WJ2_ADx54dkxwM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

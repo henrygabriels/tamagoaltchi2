@@ -5,6 +5,7 @@ import Tamagotchi from '../components/Tamagotchi';
 import { FplService } from '../services/fpl';
 import Image from 'next/image';
 import { registerForPushNotifications, unregisterFromPushNotifications } from '../services/notifications';
+import { PushNotifications } from '@capacitor/push-notifications';
 
 interface PlayerScore {
   name: string;
@@ -76,6 +77,96 @@ export default function Home() {
   const [fplService, setFplService] = useState<FplService | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<PlayerScore | null>(null);
   const [showHelp, setShowHelp] = useState(false);
+
+  // Initialize push notifications
+  useEffect(() => {
+    const initPushNotifications = async () => {
+      try {
+        // Check if we're in a Capacitor environment
+        const isCapacitor = typeof (window as any).Capacitor !== 'undefined';
+        console.log('Environment check:', { isCapacitor });
+
+        if (isCapacitor) {
+          console.log('Initializing push notifications in Capacitor environment...');
+          
+          try {
+            // First, request POST_NOTIFICATIONS permission for Android 13+
+            if ((window as any).Capacitor.getPlatform() === 'android') {
+              const { Permissions } = await import('@capacitor/core');
+              const permissionStatus = await Permissions.query({ name: 'notifications' });
+              console.log('Android notification permission status:', permissionStatus);
+
+              if (permissionStatus.state === 'prompt') {
+                const requestResult = await Permissions.request({ name: 'notifications' });
+                console.log('Android notification permission request result:', requestResult);
+              }
+            }
+
+            // Then proceed with push notification setup
+            const permStatus = await PushNotifications.checkPermissions();
+            console.log('Push notification permission status:', permStatus);
+
+            if (permStatus.receive !== 'granted') {
+              console.log('Requesting push notification permissions...');
+              const result = await PushNotifications.requestPermissions();
+              console.log('Push notification permission result:', result);
+              
+              if (result.receive === 'granted') {
+                await registerNotifications();
+              } else {
+                console.log('Push notification permission denied by user');
+              }
+            } else {
+              await registerNotifications();
+            }
+          } catch (error) {
+            console.error('Error during push notification permission check/request:', error);
+          }
+        } else {
+          console.log('Not in Capacitor environment, using web push notifications');
+          if ('Notification' in window) {
+            const permission = await Notification.requestPermission();
+            console.log('Web notification permission result:', permission);
+          }
+        }
+      } catch (error) {
+        console.error('Error initializing push notifications:', error);
+      }
+    };
+
+    const registerNotifications = async () => {
+      try {
+        // Register for push notifications
+        await PushNotifications.register();
+        console.log('Push notifications registered successfully');
+
+        // Remove any existing listeners
+        PushNotifications.removeAllListeners();
+
+        // Add listeners
+        PushNotifications.addListener('registration', (token) => {
+          console.log('Push registration success, token:', token.value);
+        });
+
+        PushNotifications.addListener('registrationError', (error: any) => {
+          console.error('Push registration error:', error.error);
+        });
+
+        PushNotifications.addListener('pushNotificationReceived', (notification) => {
+          console.log('Push notification received:', notification);
+        });
+
+        PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
+          console.log('Push notification action performed:', notification);
+        });
+      } catch (error) {
+        console.error('Error registering push notifications:', error);
+      }
+    };
+
+    // Run initialization immediately
+    initPushNotifications();
+  }, []);
 
   // Load saved data and connect on mount
   useEffect(() => {

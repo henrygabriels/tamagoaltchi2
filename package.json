@@ -16,6 +16,7 @@
     "@capacitor/android": "^6.2.0",
     "@capacitor/cli": "^6.2.0",
     "@capacitor/core": "^6.2.0",
+    "@capacitor/push-notifications": "^6.0.3",
     "axios": "^1.6.0",
     "classnames": "^2.3.2",
     "next": "^14.0.0",

@@ -7,6 +7,16 @@ export async function registerForPushNotifications(teamId: string): Promise<bool
       return false;
     }
 
+    // Request notification permission first
+    if ('Notification' in window) {
+      const permission = await Notification.requestPermission();
+      console.log('Notification permission status:', permission);
+      if (permission !== 'granted') {
+        console.log('Notification permission denied');
+        return false;
+      }
+    }
+
     // Register service worker
     const registration = await navigator.serviceWorker.register('/service-worker.js');
     console.log('Service Worker registered');
@@ -24,6 +34,7 @@ export async function registerForPushNotifications(teamId: string): Promise<bool
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
       });
+      console.log('Created new push subscription:', subscription);
     }
 
     // Send subscription to server

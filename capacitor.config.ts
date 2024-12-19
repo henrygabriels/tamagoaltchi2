@@ -14,10 +14,15 @@ const config: CapacitorConfig = {
   },
   android: {
     buildOptions: {
-      keystorePath: 'release-key.keystore',
+      keystorePath: 'android/app/release-key.keystore',
       keystoreAlias: 'key0',
       keystorePassword: 'Octagkn8',
       keystoreAliasPassword: 'Octagkn8'
+    }
+  },
+  plugins: {
+    PushNotifications: {
+      presentationOptions: ["badge", "sound", "alert"]
     }
   }
 };
