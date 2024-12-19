@@ -8,7 +8,8 @@ const config: CapacitorConfig = {
     androidScheme: 'https',
     cleartext: true,
     allowNavigation: [
-      'tamagoaltchi2-production.up.railway.app'
+      'tamagoaltchi2-production.up.railway.app',
+      'fantasy.premierleague.com'
     ]
   },
   android: {

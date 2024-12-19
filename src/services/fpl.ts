@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3001';
-const IS_CAPACITOR = typeof window !== 'undefined' && window.location.protocol === 'capacitor:';
+const IS_CAPACITOR = typeof window !== 'undefined' && (window.location.protocol === 'capacitor:' || window.location.protocol === 'https:' || window.location.protocol === 'file:');
 
 interface PlayerSummary {
   id: number;
@@ -79,34 +79,76 @@ export class FplService {
     try {
       console.log(`Making ${isSetup ? 'setup' : 'live'} request to endpoint:`, endpoint);
       
-      const baseUrl = IS_CAPACITOR ? SERVER_URL : '';
-      const url = `${baseUrl}/api/fpl-proxy`;
+      // Always use our proxy server
+      const url = IS_CAPACITOR ? 
+        `${SERVER_URL}/api/fpl-proxy` : 
+        '/api/fpl-proxy';
       
-      const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-      const response = await axios.get(url, {
-        params: { 
-          endpoint: normalizedEndpoint,
-          mode: isSetup ? 'setup' : 'live'
+      console.log('Making proxy request:', url);
+      console.log('Server URL:', SERVER_URL);
+      console.log('Is Capacitor:', IS_CAPACITOR);
+      console.log('Window location:', window.location.href);
+      
+      const config = {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
         },
-        timeout: 10000
-      });
+        timeout: 10000,
+        params: {
+          endpoint: endpoint.startsWith('/') ? endpoint : `/${endpoint}`,
+          mode: isSetup ? 'setup' : 'live'
+        }
+      };
+      
+      console.log('Request config:', JSON.stringify(config, null, 2));
+      
+      const response = await axios.get(url, config);
+      
+      console.log('Response status:', response.status);
+      console.log('Response headers:', JSON.stringify(response.headers, null, 2));
+      console.log('Response data:', JSON.stringify(response.data).slice(0, 200));
       
       return response.data;
     } catch (error: any) {
-      console.error('API request error:', {
+      // Log the full error object for debugging
+      console.error('Full error object:', error);
+      
+      // Log detailed error information
+      console.error('API request error details:', {
         message: error.message,
         status: error.response?.status,
         statusText: error.response?.statusText,
-        data: error.response?.data
+        data: error.response?.data,
+        url: error.config?.url,
+        params: error.config?.params,
+        headers: error.config?.headers,
+        method: error.config?.method,
+        // Add network error info if available
+        networkError: error.isAxiosError ? {
+          code: error.code,
+          errno: error.errno,
+          syscall: error.syscall,
+          hostname: error.hostname,
+          config: error.config
+        } : undefined
       });
       
+      // Handle specific error cases
       if (error.code === 'ECONNABORTED') {
         throw new Error('Request timed out. Please check your internet connection.');
       }
-      if (error.response?.status === 404) {
-        throw new Error('Team not found. Please check your team ID.');
+      if (error.code === 'ECONNREFUSED') {
+        throw new Error('Could not connect to the server. Please check your internet connection.');
       }
-      throw new Error(error.response?.data?.error || 'Failed to fetch FPL data');
+      if (error.response?.status === 404) {
+        throw new Error(`Team not found. Please check your team ID. Details: ${JSON.stringify(error.response.data)}`);
+      }
+      
+      // Include more error details in the thrown error
+      const errorDetails = error.response?.data?.error || error.message || 'Unknown error';
+      const statusCode = error.response?.status ? ` (Status: ${error.response.status})` : '';
+      throw new Error(`Failed to fetch FPL data: ${errorDetails}${statusCode}`);
     }
   }
 

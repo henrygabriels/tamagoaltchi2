@@ -414,6 +414,41 @@ const wss = new WebSocketServer({ server });
 // Initialize FPL server
 const fplServer = new FPLServer(wss);
 
+// FPL proxy endpoint
+app.get('/api/fpl-proxy', async (req, res) => {
+  try {
+    const { endpoint, mode } = req.query;
+    
+    if (!endpoint || typeof endpoint !== 'string') {
+      return res.status(400).json({ error: 'Endpoint parameter is required' });
+    }
+
+    console.log(`Proxying ${mode} request to:`, endpoint);
+    
+    const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    const url = `https://fantasy.premierleague.com/api${normalizedEndpoint}`;
+    
+    const response = await axios.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+        'Accept': 'application/json'
+      }
+    });
+
+    res.json(response.data);
+  } catch (error: any) {
+    console.error('FPL API Error:', {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data
+    });
+    
+    res.status(error.response?.status || 500).json({
+      error: error.response?.data || error.message
+    });
+  }
+});
+
 // Push notification endpoints
 app.post('/api/push/subscribe', async (req, res) => {
   try {
