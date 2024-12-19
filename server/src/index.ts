@@ -420,6 +420,7 @@ app.get('/api/fpl-proxy', async (req, res) => {
     const { endpoint, mode } = req.query;
     
     if (!endpoint || typeof endpoint !== 'string') {
+      console.error('Missing endpoint parameter');
       return res.status(400).json({ error: 'Endpoint parameter is required' });
     }
 
@@ -428,6 +429,8 @@ app.get('/api/fpl-proxy', async (req, res) => {
     const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
     const url = `https://fantasy.premierleague.com/api${normalizedEndpoint}`;
     
+    console.log('Making request to FPL API:', url);
+    
     const response = await axios.get(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
@@ -435,16 +438,26 @@ app.get('/api/fpl-proxy', async (req, res) => {
       }
     });
 
+    console.log('FPL API response status:', response.status);
+    console.log('FPL API response data preview:', JSON.stringify(response.data).slice(0, 200));
+
     res.json(response.data);
   } catch (error: any) {
     console.error('FPL API Error:', {
+      message: error.message,
       status: error.response?.status,
       statusText: error.response?.statusText,
-      data: error.response?.data
+      data: error.response?.data,
+      url: error.config?.url,
+      headers: error.config?.headers
     });
     
     res.status(error.response?.status || 500).json({
-      error: error.response?.data || error.message
+      error: error.response?.data || error.message,
+      details: {
+        status: error.response?.status,
+        statusText: error.response?.statusText
+      }
     });
   }
 });
