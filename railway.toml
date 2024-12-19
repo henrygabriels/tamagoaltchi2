@@ -1,6 +1,6 @@
 [build]
 builder = "nixpacks"
-buildCommand = "cd server && npm install --production=false && npm run build"
+buildCommand = "cd server && npm install && npm run build"
 
 [deploy]
 startCommand = "cd server && NODE_ENV=production node dist/index.js"
@@ -11,7 +11,7 @@ restartPolicyType = "on_failure"
 [nixpacks]
 nodejs = "18.17.1"
 plan = [
-  { name = "install", command = "cd server && npm install --production=false" },
+  { name = "install", command = "cd server && npm install" },
   { name = "build", command = "cd server && npm run build" },
   { name = "start", command = "cd server && NODE_ENV=production node dist/index.js" }
 ]
