@@ -1,12 +1,13 @@
 [build]
 builder = "nixpacks"
-buildCommand = "cd server && npm install && npm run build"
+buildCommand = "cd server && npm ci && npm run build"
 
 [deploy]
-startCommand = "cd server && npm start"
+startCommand = "cd server && NODE_ENV=production npm start"
 healthcheckPath = "/health"
 healthcheckTimeout = 100
 restartPolicyType = "on_failure"
 
 [nixpacks]
-nodejs = "18" 
+nodejs = "18"
+installCommand = "cd server && npm ci"
