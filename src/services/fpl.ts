@@ -1,5 +1,8 @@
 import axios from 'axios';
 
+const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3001';
+const IS_CAPACITOR = typeof window !== 'undefined' && window.location.protocol === 'capacitor:';
+
 interface PlayerSummary {
   id: number;
   web_name: string;
@@ -65,62 +68,110 @@ export class FplService {
   private gameweekInfo: GameweekInfo | null = null;
   private currentGameweek: number | null = null;
   private gameweekData: any = null;
-  private pollingInterval: NodeJS.Timeout | null = null;
+  private ws: WebSocket | null = null;
   private onScoresUpdate: ((scores: PlayerScore[]) => void) | null = null;
 
   constructor(teamId: string) {
     this.teamId = teamId;
   }
 
-  private async makeRequest(endpoint: string) {
+  private async makeRequest(endpoint: string, isSetup: boolean = false) {
     try {
-      console.log('Making request to endpoint:', endpoint);
+      console.log(`Making ${isSetup ? 'setup' : 'live'} request to endpoint:`, endpoint);
       
-      const response = await axios.get(`/api/fpl-proxy`, {
-        params: { endpoint }
+      const baseUrl = IS_CAPACITOR ? SERVER_URL : '';
+      const url = `${baseUrl}/api/fpl-proxy`;
+      
+      const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+      const response = await axios.get(url, {
+        params: { 
+          endpoint: normalizedEndpoint,
+          mode: isSetup ? 'setup' : 'live'
+        },
+        timeout: 10000
       });
-      
-      if (!response.data) {
-        throw new Error('Empty response from FPL API');
-      }
       
       return response.data;
     } catch (error: any) {
-      console.error('API request error:', error);
+      console.error('API request error:', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data
+      });
+      
+      if (error.code === 'ECONNABORTED') {
+        throw new Error('Request timed out. Please check your internet connection.');
+      }
+      if (error.response?.status === 404) {
+        throw new Error('Team not found. Please check your team ID.');
+      }
       throw new Error(error.response?.data?.error || 'Failed to fetch FPL data');
     }
   }
 
   async initialize() {
     try {
-      // Get all player data
-      const bootstrapData = await this.makeRequest('/bootstrap-static/');
+      console.log('Starting FPL service initialization...');
+      
+      // Get team info in setup mode
+      const teamInfo = await this.makeRequest(`/entry/${this.teamId}/`, true);
+      console.log('Team found:', teamInfo.name);
+
+      // Get bootstrap data in setup mode
+      const bootstrapData = await this.makeRequest('/bootstrap-static/', true);
+      console.log('Bootstrap data received, validating...');
+      
+      if (!bootstrapData) {
+        throw new Error('No bootstrap data received from FPL API');
+      }
+      
+      if (!bootstrapData.teams || !bootstrapData.elements || !bootstrapData.events) {
+        throw new Error(`Invalid bootstrap data structure. Missing required fields. Available fields: ${Object.keys(bootstrapData).join(', ')}`);
+      }
       
       // Store team abbreviations
+      console.log('Processing team data...');
       bootstrapData.teams.forEach((team: { id: number, short_name: string }) => {
         this.teamMap.set(team.id, team.short_name);
       });
+      console.log(`Processed ${this.teamMap.size} teams`);
 
+      console.log('Processing player data...');
       bootstrapData.elements.forEach((player: PlayerSummary) => {
         this.playerMap.set(player.id, player);
       });
+      console.log(`Processed ${this.playerMap.size} players`);
 
       // Find current gameweek
+      console.log('Finding current gameweek...');
       const { gameweek, info } = this.findRelevantGameweek(bootstrapData.events);
       this.currentGameweek = gameweek;
       this.gameweekInfo = info;
+      console.log(`Current gameweek: ${gameweek}`);
 
-      // Get team picks
-      const picks = await this.makeRequest(`/entry/${this.teamId}/event/${this.currentGameweek}/picks/`);
+      // Get team picks in setup mode
+      console.log('Fetching team picks...');
+      const picks = await this.makeRequest(`/entry/${this.teamId}/event/${this.currentGameweek}/picks/`, true);
+      if (!picks || !picks.picks) {
+        throw new Error('Invalid picks data received from FPL API');
+      }
       this.picks = picks.picks;
+      console.log(`Processed ${this.picks.length} picks`);
 
-      // Get gameweek data
-      this.gameweekData = await this.makeRequest(`/event/${this.currentGameweek}/live/`);
+      // Get initial gameweek data in live mode
+      console.log('Fetching gameweek data...');
+      const gameweekData = await this.makeRequest(`/event/${this.currentGameweek}/live/`, false);
+      if (!gameweekData || !gameweekData.elements) {
+        throw new Error('Invalid gameweek data received from FPL API');
+      }
+      this.gameweekData = gameweekData;
 
+      console.log('FPL service initialized successfully');
       return this.currentGameweek;
     } catch (error: any) {
       console.error('Initialization error:', error);
-      throw error;
+      throw new Error(`Failed to initialize FPL service: ${error.message}`);
     }
   }
 
@@ -144,14 +195,16 @@ export class FplService {
   }
 
   async getTeamInfo() {
-    return await this.makeRequest(`/entry/${this.teamId}/`);
+    // Get team info in setup mode
+    return await this.makeRequest(`/entry/${this.teamId}/`, true);
   }
 
   async getGameweekDetails() {
     if (!this.currentGameweek) {
       throw new Error('No gameweek selected');
     }
-    return this.gameweekData;
+    // Get gameweek data in live mode
+    return this.makeRequest(`/event/${this.currentGameweek}/live/`, false);
   }
 
   isGameweekFinished(): boolean {
@@ -196,51 +249,62 @@ export class FplService {
   async startLiveUpdates(callback: (scores: PlayerScore[]) => void) {
     this.onScoresUpdate = callback;
     
-    // Don't start polling for completed gameweeks
     if (this.isGameweekFinished()) {
       console.log('Gameweek is finished, not starting live updates');
       return;
     }
 
-    console.log('Starting live updates...');
+    console.log('Starting live updates via WebSocket...');
     
-    // Clear any existing interval
-    if (this.pollingInterval) {
-      clearInterval(this.pollingInterval);
+    if (this.ws) {
+      this.ws.close();
     }
 
-    // Poll every 30 seconds during live games
-    this.pollingInterval = setInterval(async () => {
-      try {
-        const newData = await this.makeRequest(`/event/${this.currentGameweek}/live/`);
-        const oldScores = this.getPlayerScores();
-        
-        // Update gameweek data
-        this.gameweekData = newData;
-        
-        // Get new scores
-        const newScores = this.getPlayerScores();
-        
-        // Check if any scores changed
-        const hasChanges = newScores.some((newScore) => {
-          const oldScore = oldScores.find(s => s.name === newScore.name);
-          return oldScore?.points !== newScore.points;
-        });
+    // Create WebSocket connection
+    const wsProtocol = IS_CAPACITOR || window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const serverUrl = new URL(SERVER_URL);
+    const wsUrl = `${wsProtocol}//${serverUrl.host}`;
+    
+    console.log('Connecting to WebSocket URL:', wsUrl);
+    this.ws = new WebSocket(wsUrl);
 
-        if (hasChanges && this.onScoresUpdate) {
-          console.log('Scores updated:', newScores);
-          this.onScoresUpdate(newScores);
+    this.ws.onopen = () => {
+      console.log('WebSocket connected, registering team ID:', this.teamId);
+      this.ws.send(JSON.stringify({
+        type: 'register',
+        teamId: this.teamId
+      }));
+    };
+
+    this.ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log('Received WebSocket message:', data);
+        if (data.type === 'update' && this.onScoresUpdate) {
+          this.onScoresUpdate(data.data.picks);
         }
       } catch (error) {
-        console.error('Error polling live data:', error);
+        console.error('Error processing WebSocket message:', error);
       }
-    }, 30000); // 30 seconds
+    };
+
+    this.ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
+
+    this.ws.onclose = (event) => {
+      console.log('WebSocket connection closed:', event.code, event.reason);
+      setTimeout(() => {
+        console.log('Attempting to reconnect WebSocket...');
+        this.startLiveUpdates(callback);
+      }, 5000);
+    };
   }
 
   stopLiveUpdates() {
-    if (this.pollingInterval) {
-      clearInterval(this.pollingInterval);
-      this.pollingInterval = null;
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
     }
     this.onScoresUpdate = null;
   }

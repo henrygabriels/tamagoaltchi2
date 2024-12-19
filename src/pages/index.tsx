@@ -1,5 +1,5 @@
 import React from 'react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
 import Tamagotchi from '../components/Tamagotchi';
 import { FplService } from '../services/fpl';
@@ -88,16 +88,17 @@ export default function Home() {
         if (success) {
           if (savedCustomization) {
             setCustomization(JSON.parse(savedCustomization));
-            setIsConnected(true); // Only auto-connect if we have both team ID and customization
+            setIsConnected(true);
           } else {
-            setIsCustomizing(true); // Show customization if we only have team ID
+            setIsCustomizing(true);
           }
         }
       });
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const connectToFpl = async (id: string) => {
+  const connectToFpl = useCallback(async (id: string) => {
     setIsLoading(true);
     setError('');
     setConnectionStatus('Connecting to FPL...');
@@ -145,19 +146,19 @@ export default function Home() {
         console.log('Push notifications not available');
       }
 
-      return true; // Return success
+      return true;
     } catch (error: any) {
       console.error('Connection error:', error);
       setError(error.message || 'Error connecting to FPL. Please check your team ID and try again.');
       setMood('neutral');
       setConnectionStatus('');
       setFplService(null);
-      localStorage.removeItem('teamId'); // Clear saved ID if it's invalid
-      return false; // Return failure
+      localStorage.removeItem('teamId');
+      return false;
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   const handleScoresUpdate = (newScores: PlayerScore[]) => {
     setPlayerScores(newScores);

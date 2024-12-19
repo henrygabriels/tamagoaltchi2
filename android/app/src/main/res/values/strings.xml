@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Tamagoaltchi</string>
+    <string name="title_activity_main">Tamagoaltchi</string>
+    <string name="package_name">com.tamagoaltchi.app</string>
+    <string name="custom_url_scheme">com.tamagoaltchi.app</string>
+</resources>
